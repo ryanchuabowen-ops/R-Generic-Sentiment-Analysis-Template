@@ -1,0 +1,210 @@
+---
+title: "Generic Preproc"
+output: html_document
+date: "2025-05-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+# Part 2
+## Install Packages(if not done yet)
+```{r install packages, echo=FALSE}
+install.packages(c("mlr3", "caret", "e1071", "randomForest", "xgboost", "tidymodels", "ggplot2", "xml2", "XML", "plotly", "wordcloud", "wordcloud2", "tm", "syuzhet", "textstem", "tidyr", "dplyr", "zoo", "mltools", "corrplot", "pivottabler", "treemap", "psych", "caTools", "MASS", "klaR", "mlr3learners", "mlr3tuning", "mlr3viz", "mlr3extralearners", "mlr3proba", "rvision" ,"ranger"))
+
+```
+
+## Import
+```{r import lib, echo=FALSE}
+library(xml2) #xml read
+library(XML)
+library(ggplot2) #plotting
+library(plotly)
+library(wordcloud) #wordcloud viz
+library(tm)
+library(syuzhet) #text mining and senti analysis
+library(textstem) #text processing
+library(dplyr)
+library(tidyr)
+library(zoo) #processing
+library(mlr3) #regression and class
+library(mlr3learners)
+library(mlr3tuning)
+library(mlr3viz)
+library(mlr3extralearners)
+library(mlr3proba)
+library(ranger)
+library(caret)
+library(e1071)
+library(randomForest) #ML
+library(xgboost)
+library(tidymodels)
+library(mltools)
+library(data.table) #Charting
+library(corrplot)
+library(pivottabler)
+library(treemap)
+library(psych)
+library(caTools)
+library(MASS)
+library(klaR)
+```
+
+## Read CSVs
+```{r set df, echo=TRUE}
+airp <- read.csv("./Datasets/airports.csv", sep = ',')
+carriers <- read.csv("./Datasets/carriers.csv", sep = ',')
+```
+
+## Pre-processing
+```{r data exploration, echo=TRUE}
+summary(data.frame(airp))
+boxplot(data.frame(flights2008$DepDelay), ylab = toString('depart delay'))
+hist(flights2008$AirTime)
+```
+
+```{r entire pre-proc transformation, echo=TRUE}
+preproc <- function(plane.df, airp.df, flight.df, carrier.df){
+  ## Truncate
+  if (nrow(flight.df)>3000000){
+  flight.df <- flight.df[1:2500000,]
+  }
+  ## Cleaning
+  for (i in c("ArrTime", "ArrDelay", "AirTime", "ActualElapsedTime", "TaxiIn")){
+    flight.df[(flight.df$Diverted == 1),i] = mean(flight.df[,i], na.rm = TRUE);
+  }
+  flight.df.clean <- flight.df[,1:24] %>% na.omit()
+  remove(flight.df); gc()
+  
+  ## Merging
+  prep <- merge(flight.df.clean, plane.df, by.x = "TailNum", by.y = "tailnum")
+  remove(flight.df.clean); gc()
+
+  ## old change name method
+  #prep <- merge(prep, airp.df, by.x = "Origin", by.y = "iata")
+  #names(prep)[names(prep) == "lat"] <- "Origin.Lat"; names(prep)[names(prep) == "long"] <- "Origin.Long"
+
+  #prep <- merge(prep, airp.df, by.x = "Dest", by.y = "iata")
+  #names(prep)[names(prep) == "lat"] <- "Dest.Lat"; names(prep)[names(prep) == "long"] <- "Dest.Long"
+  #remove(airp.df); gc()
+
+  #prep <- merge(prep, carrier.df, by.x = "UniqueCarrier", by.y = "Code")
+  #names(prep)[names(prep) == "Code"] <- "Carrier.Name"
+  #remove(carrier.df); gc()
+  
+  ## Fix Encode
+  prep$year[prep$year==""] = NA; prep$year[prep$year=="None"] = NA; prep$year[prep$year=="0000"] = NA
+  prep <- prep %>% na.omit()
+  
+  prep$year <- as.numeric(prep$year)
+  prep <- mutate(prep, TotalDelay = ArrDelay + DepDelay, Age = Year - year)
+  
+  ## Adding factor column
+  num <- c(-1,0)
+  label <- c("Non-Diverted","Diverted")
+  lookup <- data.frame(num,label)
+  Diverted_name <- cut(prep$Diverted,c(lookup$num,1),lookup$label)
+  prep <- cbind(prep, Diverted_name)
+  remove(Diverted_name, label, num); gc()
+  
+  return(prep)
+}
+```
+
+```{r pre-proc for individual flight, echo=TRUE}
+prep.2008 <- preproc(plane, airp, flights2008, carriers); prep.2007 <- preproc(plane, airp, flights2007, carriers); prep.2006 <- preproc(plane, airp, flights2006, carriers); prep.2005 <- preproc(plane, airp, flights2005, carriers); prep.2004 <- preproc(plane, airp, flights2004, carriers); remove(plane, airp, flights2008, flights2007, flights2006, flights2005, flights2004, carriers); gc()
+## Recommended to skip to logistic regression section, then continue sequentially from Line 140 :-)
+```
+
+
+# Larger Dataset Pre-processing
+```{r joining, echo=TRUE}
+remove(prep.2004, prep.2005, prep.2006, prep.2007, prep.2008); gc()
+logs = rbind(flights2008,flights2007, flights2006, flights2005, flights2004)
+remove(flights2008,flights2007, flights2006, flights2005, flights2004); gc()
+```
+
+```{r data exploration, echo=TRUE}
+#Due to the axis of some variables being different, violin and ridgeline plots will not be used
+summary(logs)
+
+# Histogram
+invt <- list(logs$AirTime, logs$Distance, logs$ArrDelay, logs$DepDelay)
+for (details in invt){
+  hist(details)
+}
+
+# Boxplot
+int <- list(list('dep time', logs$DepTime), list('depart delay', logs$DepDelay), list('arrival time', logs$ArrTime), list('Arrival delay', logs$ArrDelay), list('Air time', logs$AirTime))
+for (i in int){
+  boxplot(data.frame(i[2]), ylab = toString(i[1]))
+}
+```
+
+```{r data cleaning, echo=TRUE}
+### Remove empty variables and Impute mean
+logs[(logs$Diverted == 1),"ArrTime"] = 1517; logs[(logs$Diverted == 1),"ArrDelay"] = -1; logs[(logs$Diverted == 1),"AirTime"] = 84; logs[(logs$Diverted == 1),"ActualElapsedTime"] = 106; logs[(logs$Diverted == 1),"TaxiIn"] = 5
+logs.clean <- logs %>% select(1:24) %>% na.omit()
+remove(logs); gc()
+```
+
+```{r data preparation and cleaning, echo=TRUE}
+## Merging
+prep <- merge(logs.clean, plane, by.x = "TailNum", by.y = "tailnum")
+remove(logs.clean); gc()
+
+prep <- merge(prep, airp, by.x = "Origin", by.y = "iata")
+setnames(prep, old = c("lat", "long", 'airport.x','city.x', 'state.x', 'country.x'), new = c("Origin.Lat", "Origin.Long", 'airport.origin','city.origin', 'state.origin', 'country.origin'))
+prep <- merge(prep, airp, by.x = "Dest", by.y = "iata")
+setnames(prep, old = c("lat", "long", 'airport.y','city.y', 'state.y', 'country.y'), new = c("Dest.Lat", "Dest.Long", 'airport.dest','city.dest', 'state.dest', 'country.dest'))
+remove(airp); gc()
+
+prep <- merge(prep, carriers, by.x = "UniqueCarrier", by.y = "Code")
+names(prep)[names(prep) == "Code"] <- "Carrier.Name"
+remove(carriers); gc()
+
+
+## Fixing "", "None" and 0000 values within merged dataset as to not hamper the Age calculation
+# Encode "", "None" and 0000 values to NA
+prep$year[prep$year==""] = NA; prep$year[prep$year=="None"] = NA; prep$year[prep$year=="0000"] = NA
+
+# Removal of rows with NA values ie problematic rows caused by planes dataset
+prep <- prep %>% na.omit()
+
+## Manipulation of arrival and departure delay into total delay
+prep$year <- as.numeric(prep$year)
+prep <- mutate(prep, TotalDelay = ArrDelay + DepDelay, DistDelayRatio = Distance/TotalDelay, Age = Year - year)
+
+## Encoding (one-hot) of categorical variables
+cols <- c("type","manufacturer","engine_type","aircraft_type")
+dmyfx <- dummyVars(~ type + manufacturer + engine_type + aircraft_type,data.frame(prep[cols], stringsAsFactors = T))
+dmycols <- predict(dmyfx, data.frame(prep[cols], stringsAsFactors = T))
+prep <- cbind(prep, dmycols)
+remove(plane, dmyfx, dmycols, cols); gc()
+
+## Encoding (label) of DepTime variable (lookup table method)
+num <- c(0000,0200,0400,0600,0800,1000,1200,1400,1600,1800,2000,2200)
+label <- c("0000-0200","0200-0400","0400-0600", "0600-0800", "0800-1000", "1000-1200", "1200-1400","1400-1600","1600-1800","1800-2000","2000-2200","2200-2359")
+label4h <- c("0000-0400","0000-0400","0400-0800","0400-0800","0800-1200","0800-1200","1200-1600","1200-1600","1600-2000","1600-2000","2000-2359","2000-2359")
+name <- c("Midnight","Midnight","Early Morning","Early Morning","Morning","Morning","Afternoon","Afternoon","Evening","Evening","Night","Night")
+lookup <- data.frame(num,label,label4h,name)
+
+DepTime_2H <- cut(prep$DepTime,c(lookup$num,2400),lookup$label)
+DepTime_4H <- cut(prep$DepTime,c(lookup$num,2400),lookup$label4h)
+DepTime_4H_Name <- cut(prep$DepTime,c(lookup$num,2400),lookup$name)
+prep <- cbind(prep, DepTime_2H, DepTime_4H, DepTime_4H_Name)
+prep <- prep %>% na.omit()
+remove(lookup, num, label, label4h, name, DepTime_2H, DepTime_4H, DepTime_4H_Name); gc()
+```
+
+
+
+

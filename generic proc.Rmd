@@ -1,0 +1,263 @@
+---
+title: "Processing"
+author: "Meee"
+date: "2025-05-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Processing
+```{r Descriptive DA, echo=TRUE}
+print("Summary Stats:");summary(prep[1:35]); print("IQR:"); IQR(prep$Age); IQR(prep$TotalDelay); IQR(prep$DistDelayRatio); gc()
+
+# Matrices (correlation analysis)
+r <- cor(data.frame(prep[,c("AirTime", "DepDelay", "ArrDelay", "TotalDelay", "Age", "Distance")]), method = "pearson"); round(r, 4); corrplot(r, type = "upper", order = "hclust", tl.col = "black", tl.srt = 45, outline = TRUE); gc()
+
+r <- cor(data.frame(prep[,c("AirTime", "DepDelay", "ArrDelay", "TotalDelay", "Age", "Distance")]), method = "spearman"); round(r, 4); corrplot(r, type = "upper", order = "hclust", tl.col = "black", tl.srt = 45, outline = TRUE); gc()
+
+my_col <- c("#00AFBB", "#FC4E07","#eb4034","#b0645f","#5f68b0","#72b05f","#edd62b"); pairs(data.frame(prep[(prep$Diverted==1),c(16,17,18,19,46,48)]), pch = 19,  cex = 0.5, col = my_col[prep$Diverted], lower.panel=NULL); pairs(data.frame(prep[1:100000,c(16,17,18,19,46,48)]), pch = 19,  cex = 0.5, col = my_col[prep$Diverted], lower.panel=NULL); pairs(data.frame(prep[1:100000,c(16,17,18,19,46,48)]), pch = 19,  cex = 0.5, col = my_col[prep$DayOfWeek], lower.panel=NULL)
+remove(r, my_col); gc()
+
+## Bar plot
+barplot(table(prep$engine_type), main = "Count of Aircrafts by Engine Types", xlab = "Count", col = brewer.pal(name = "Set3", n=10), horiz = T, las = 1, cex.names = 0.6)
+
+## Pivot Tables
+
+# Counts of aircraft types
+pt <- PivotTable$new()
+pt$addData(prep)
+pt$addColumnDataGroups("engine_type")
+pt$addRowDataGroups("aircraft_type")
+pt$defineCalculation(calculationName="TotalDelay", summariseExpression="n()")
+pt$renderPivot()
+
+# Counts of flights taken by owner types
+pt <- PivotTable$new()
+pt$addData(prep)
+pt$addColumnDataGroups("engine_type")
+pt$addRowDataGroups("type")
+pt$defineCalculation(calculationName="AirTime", summariseExpression="n()")
+pt$renderPivot()
+
+# mean
+qhpvt(prep, "aircraft_type", "engine_type", "mean(TotalDelay)", format="%.2f")
+qhpvt(prep, "aircraft_type", "engine_type", "mean(Distance)", format="%.2f")
+qhpvt(prep, "aircraft_type", "engine_type", "mean(Age)", format="%.2f")
+qhpvt(prep, "aircraft_type", "engine_type", "mean(DistDelayRatio)", format="%.2f")
+qhpvt(prep, "type", "engine_type", "mean(AirTime)", format="%.2f")
+remove(pt); gc()
+
+## Violin Box plot
+prep %>% 
+  ggplot(aes(y=DepTime, x = type, fill = type, colour = type)) +
+    geom_violin(width=0.8, trim = FALSE) +
+    scale_fill_brewer(palette = "Accent")+
+    scale_colour_brewer(palette = "Accent")+
+    geom_boxplot(width=0.1, color="black", alpha=0.2, staplewidth = 1)+
+    theme_classic() + 
+    xlab("Owner type")
+```
+
+```{r EDA, echo=TRUE}
+## Histogram
+invt <- list(prep$AirTime, prep$Distance, prep$ArrDelay, prep$DepDelay)
+for (details in invt){
+  hist(details)
+}
+
+## Scatterplot
+plot(prep$Distance[1:10000], prep$AirTime[1:10000], xlab='Distance', ylab = 'Air Time')
+plot(prep$TotalDelay[1:10000], prep$AirTime[1:10000], xlab='TotalDelay', ylab = 'Air Time')
+plot(prep$Distance[1:10000], prep$TotalDelay[1:10000], xlab='Distance', ylab = 'Total Delay')
+
+prep[prep$Age >= 0 & prep$Year==2008,] %>% ggplot(aes(y=TotalDelay, x=Age))+
+  geom_point(shape=18, size=3)+
+  coord_cartesian(ylim = c(0, 5000))+
+  ggtitle("Age vs Total Delay 2008")
+
+## Violin plot
+prep[prep$Year==2008,] %>% 
+  ggplot(aes(y=TotalDelay, x = as.factor(DayOfWeek), fill = as.factor(DayOfWeek), colour = as.factor(DayOfWeek))) +
+    geom_violin(width=0.8, trim = TRUE) +
+    scale_fill_brewer(palette = "Dark2")+
+    scale_colour_brewer(palette = "Dark2")+
+    geom_boxplot(width=0.1, color="black", alpha=0.2, staplewidth = 1, outliers = F)+
+    theme_classic() + 
+    xlab("Days of Week 2008")
+
+## Boxplot
+prep %>% 
+  ggplot(aes(y=TotalDelay, x = aircraft_type, fill = aircraft_type)) +
+    scale_fill_brewer(palette = "Accent")+
+    geom_boxplot(width=0.1, color="black", alpha=0.2, staplewidth = 1)+
+    theme_classic() + 
+    theme(axis.text.x = element_text(angle=90, hjust=1)) +
+    xlab("aircraft type")
+
+prep[prep$Year==2008,] %>% 
+  ggplot(aes(y=TotalDelay, x = as.factor(DayOfWeek), fill = as.factor(DayOfWeek), colour = as.factor(DayOfWeek))) +
+    scale_fill_brewer(palette = "Accent")+
+    geom_boxplot(width=0.75, color="black", alpha=0.2, staplewidth = 1, outliers = F)+
+    stat_summary(fun=mean, geom = "point", shape=20, size=5, color="red", fill="red") +
+    theme_classic() + 
+    xlab("Days of Week 2008")
+
+## Barplot
+prep[prep$Year==2008,] %>% 
+  ggplot(aes(x=DepTime_2H, y=TotalDelay, fill=as.factor(DayOfWeek))) + 
+    geom_bar(position="stack", stat="summary", width=0.8, ) +
+    coord_flip()
+
+## Pivot tables
+qhpvt(prep, "DayOfWeek", "DepTime_4H_Name", "mean(TotalDelay)", format="%.2f")
+
+qhpvt(prep, "DayOfWeek", c("Year","DepTime_4H"), "mean(DepDelay)", format="%.2f")
+
+qhpvt(prep, "DayOfWeek", c("Year","DepTime_2H"), "mean(DepDelay)", format="%.2f")
+
+## Treemap
+prep[prep$TotalDelay<0,] %>% mutate(TotalEarly=-1*TotalDelay) %>% treemap(index=c("state.origin", "state.dest"),vSize="TotalEarly",type="index",border.lwds=c(3, 1), border.col = c("red", "black"))
+
+prep[prep$TotalDelay<0,] treemap(index=c("state.origin", "state.dest"),vSize="TotalDelay",type="index",border.lwds=c(3, 1), border.col = c("red", "black")) 
+
+prep[prep$ArrDelay>0,] %>% treemap(index=c("state.dest"),vSize="ArrDelay",type="index",border.lwds=c(3, 1), border.col = c("red", "black"))
+
+prep[prep$DepDelay>0,] %>% treemap(index=c("state.origin"),vSize="DepDelay",type="index",border.lwds=c(3, 1), border.col = c("red", "black"))
+
+## Line plot
+prep[prep$Age >= 0 & prep$Year==2005,] %>% group_by(Age) %>%  summarise(Total.Delay = mean(TotalDelay)) %>% ggplot(aes(y=Total.Delay, x=Age))+
+  geom_line(linewidth=1, colour="red")+
+  ggtitle("Age vs Mean Total Delay 2005");gc()
+
+## Smooth Line plot
+prep[prep$Age >= 0 & prep$Year==2008,] %>% group_by(Age) %>%  summarise(Total.Delay = mean(TotalDelay)) %>% ggplot(aes(y=Total.Delay, x=Age))+
+  ggtitle("Age vs Mean Total Delay 2008")+
+  stat_smooth(aes(x = seq(length(unique(Total.Delay)))),se = T, method = "lm", formula = y ~ poly(x, 9));gc()
+
+prep[prep$Age >= 0,] %>% group_by(Age) %>%  summarise(Total.Delay = mean(TotalDelay)) %>% ggplot(aes(y=Total.Delay, x=Age))+
+  ggtitle("Age vs Mean Total Delay (All 5 years)")+
+  stat_smooth(aes(x = seq(length(unique(Total.Delay)))),se = T, method = "lm", formula = y ~ poly(x, 9));gc()
+
+## Corr plot
+r <- cor(data.frame(prep[prep$Year==2004,c("DepDelay", "ArrDelay", "TotalDelay", "Age")]), method = "pearson"); round(r, 4); corrplot(r, type = "upper", order = "hclust", tl.col = "black", tl.srt = 45, outline = TRUE)
+r <- cor(data.frame(prep[prep$Year==2004,c("DepDelay", "ArrDelay", "TotalDelay", "Age")]), method = "pearson"); round(r, 4); corrplot(r, type = "upper", order = "hclust", tl.col = "black", tl.srt = 45, outline = TRUE, method = "number"); remove(r); gc()
+```
+
+```{r statistical/inferential DA, echo=TRUE}
+## Correlation Analysis of outcome (All 3 delays: ArrDelay, DepDelay, TotalDelay) and predictor variables
+corrplot(cor(prep[,c("DepDelay", "ArrDelay", "TotalDelay", "AirTime",  "Age", "Distance", "DepTime", "ArrTime", "ActualElapsedTime", "FlightNum", "Origin.Lat", "Origin.Long", "Dest.Lat", "Dest.Long", "DayOfWeek", "DayofMonth")]), method="circle"); corrplot(cor(prep[,c("DepDelay", "ArrDelay", "TotalDelay", "AirTime",  "Age", "Distance", "DepTime", "ArrTime", "ActualElapsedTime", "FlightNum", "Origin.Lat", "Origin.Long", "Dest.Lat", "Dest.Long", "DayOfWeek", "DayofMonth")]), method="number")
+
+## Factor Analysis
+t <- data.frame(prep[,c("AirTime", "DepDelay", "ArrDelay", "TotalDelay", "Age", "Distance", "DepTime", "ArrTime", "ActualElapsedTime", "FlightNum", "Origin.Lat", "Origin.Long", "Dest.Lat", "Dest.Long", "DayOfWeek", "DayofMonth")], stringsAsFactors = F) %>% na.omit()
+fit1 <- fa(t, nfactors = 2, rotate = "None")
+fit2 <- fa(t, nfactors = 2, rotate = "varimax")
+as.data.frame(unclass(fit1$loadings)); print(fit1)
+as.data.frame(unclass(fit2$loadings)); print(fit2)
+remove(t,fit1,fit2);gc()
+```
+
+```{r Diagnostic and Prescriptive DA, echo=TRUE}
+## LDA (2 groups) 
+prep.4M.50 <- prep[1:4000000,1:50] #Modify rows as needed according to RAM quantity
+num <- c(-1,0)
+label <- c("Non-Diverted","Diverted")
+lookup <- data.frame(num,label)
+Diverted_name <- cut(prep.4M.50$Diverted,c(lookup$num,1),lookup$label)
+prep.4M.50 <- cbind(prep.4M.50, Diverted_name)
+remove(Diverted_name, label, num,lookup, prep); gc() #Sayonara prep df, you have been a good companion
+
+######### Split #######################
+split <- prep.4M.50 %>% sample.split(SplitRatio = 0.8)
+training <- subset(prep.4M.50, split==TRUE)
+testing <- subset(prep.4M.50, split==FALSE); gc()
+
+######### Set params, use params to normalise train and test set
+preproc.param <- training %>% preProcess(method = c("center", "scale")) #Use data to estimate/set params
+train.norm <- preproc.param %>% predict(training) #Use params to normalise training data
+test.norm <- preproc.param %>% predict(testing) #Use params to normalise training data
+remove(training, testing, preproc.param, split); gc()
+
+########### lda and predict 
+model <- lda(Diverted_name~AirTime+Age+Distance+DepTime+ArrTime+DayOfWeek, data = train.norm)
+predictions <- predict(model, test.norm)
+model ## model data
+
+############# validation
+valid <- xtabs(~test.norm$Diverted_name+predictions$class) #validation hit rate
+hit <- (valid[1,1]+valid[2,2])/nrow(test.norm)
+miss <- 1-hit
+recall <- valid[2,2]/(valid[2,2]+valid[2,1])
+precision <- valid[2,2]/(valid[2,2]+valid[1,2])
+valid
+print(c("Hit rate: ", hit, "miss rate ", miss,"recall: ", recall,"precision: ", precision))
+remove(hit, miss, recall, precision,valid); gc()
+
+########### Centroids
+LDScores <- predictions$x
+LD1 <- LDScores[,1]
+categories <- row.names(as.matrix(table(train.norm$Diverted_name)))
+centroid1G1=sum(LDScores[,1]*(train.norm$Diverted_name==categories[1]))/sum(train.norm$Diverted_name==categories[1]) #LD function 1, centroid for G1
+centroid1G2=sum(LDScores[,1]*(train.norm$Diverted_name==categories[2]))/sum(train.norm$Diverted_name==categories[2]) #LD function 1, centroid for G2
+centroids=matrix(c(centroid1G1,centroid1G2),nrow=2,ncol=1,dimnames=list(c("Non-Diverted", "Diverted"),c("LD1")))
+centroids
+cutoff <- (centroids[1,1]+centroids[2,1])/2 #simple average cutoff point as per ST3188
+print(c("Cutoff: ", cutoff))
+remove(predictions, centroids, centroid1G1, centroid1G2, LD1, LDScores, categories); gc()
+
+######### test of equality of group means to check predictors
+greedy.wilks(Diverted_name~AirTime+Age+Distance+DepTime+ArrTime+DayOfWeek, data = test.norm, niveau = 0.05); remove(test.norm, train.norm, model, cutoff); gc()
+```
+
+```{r Predictive DA, echo=TRUE}
+# Task and train-test split
+prep.2008.temp <- cbind(prep.2008[,5:21], prep.2008[,32:35])
+task = as_task_classif(prep.2008.temp,target='Diverted_name') # Creating a task
+ids = partition(task, ratio = 0.8) # Splitting the task
+remove(prep.2006, prep.2005, prep.2004,prep.2007);gc()
+
+######################
+# ml algo trial run
+mlr_learners$get("classif.log_reg") #Get the algorithm
+#learner =  lrn("classif.log_reg")
+
+# train, predict and score
+learner$train(task, row_ids = ids$train)
+predictions = learner$predict(task, row_ids = ids$test)
+predictions$score()
+######################
+
+## HPT (based on last round for Y2008)
+#set algo and tuning range
+learner =  lrn("classif.log_reg",
+  epsilon  = to_tune(1e-12, 1e-10),
+  maxit = to_tune(25, 30))
+
+# tuning instance for describing the problem
+instance = ti(
+  task = task,
+  learner = learner,
+  resampling = rsmp("cv", folds = 2),
+  measures = msr("classif.auc"),
+  terminator = trm("none"))
+
+# GS CV to execute tuning instance
+tuner = tnr("grid_search", resolution = 5)
+tuner$optimize(instance)
+
+# Plot
+autoplot(instance, type = "surface")
+
+# Set param values
+learner$param_set$values = instance$result_learner_param_vals
+learner$train(task, row_ids = ids$train)
+learner$model
+```
