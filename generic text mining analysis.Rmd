@@ -1,0 +1,220 @@
+---
+title: "test"
+output: html_document
+date: "2024-10-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+## Library import, xml, plots, wordcloud, mining, news, scrapers,
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r library call, echo=FALSE}
+library(xml2,XML)
+library(ggplot2,plotly)
+library(wordcloud,wordcloud2)
+library(tm, syuzhet)
+library(textstem)
+library(newsanchor,newscatcheR)
+library(rvest,scrapeR)
+library(koRpus)
+```
+
+## pre-processing - data extraction
+```{r assign api key, echo=FALSE}
+set_api_key(path = "~/.Renviron")
+```
+
+## news table
+```{r scraping news, echo=FALSE}
+results <- get_everything(query = "Belgium danger")
+results <- results["results_df"]
+results.df <- data.frame(results)
+colnames(results.df) <- c("author", "title", "description", "url", "url_to_image", "published_at", "content", "id", "name")
+View(results.df)
+```
+
+## data exploration
+```{r descriptive stats and charts, echo=FALSE}
+summary(results.df)
+```
+
+##data cleaning
+```{r , echo=FALSE}
+removeTags <- function(input){gsub("[@#]\\S+ *","",input)}
+removeURL <- function(input){gsub("http\\S+ *","",input)}
+removeCR <- function(input){gsub("\\n","",input)}
+removeSpecChar <- function(input){gsub("[^[:alpha:][:space:]]","",input)}
+stoplist <- list("the", "and", "for", "this", "with", "has", "its", "can", "get", "are", "been", "where", "will", "our", "was", "about", "being", "have", "into", "which", "but", "when", "what", "than", "that", "were", "while", "they", "too", "those", "there", "through")
+x<-results.df.clean.corpus
+x <- tm_map(x, removeWords, stopwords('english'))
+x <- tm_map(x, removePunctuation)
+x <- tm_map(x, stemDocument)
+x <- tm_map(x,lemmatize_strings)
+```
+
+##data cleaning-new
+```{r wipe words, echo=FALSE}
+remove <- function(input){
+  input <- gsub("[@#]\\S+ *","",input)
+  input <- gsub("http\\S+ *","",input)
+  input <- gsub("\\n","",input)
+  input <- gsub("[^[:alpha:][:space:]]","", input)
+  return(input)
+}
+```
+
+## preparation of corpus
+```{r transform words in corpus, echo=FALSE}
+prep <- function(input){
+  input <- tm_map(input, removeWords, stopwords('english'))
+  input <- tm_map(input, removePunctuation)
+  input <- tm_map(input, stemDocument)
+  input <- tm_map(input, lemmatize_strings)
+  return(input)
+}
+```
+
+## stacked function for execution
+```{r stacked execution function}
+execute <- function(input){
+  input <- remove(input)
+  input <- Corpus(VectorSource(input))
+  input <- prep(input)
+  return(input)
+}
+```
+
+## function calls
+```{r calls, echo=FALSE}
+results.corpus.short <- execute(results.df$description)
+results.corpus.title <- execute(results.df$title)
+results.corpus.content <- execute(results.df$content)
+```
+
+## Processing -EDA
+```{r wordcloud, echo=FALSE}
+wordcloud(results.corpus.content, random.order = FALSE, random.color = FALSE, colors = brewer.pal(9, "BuPu")[4:9])
+wordcloud(results.corpus.short, random.order = FALSE, random.color = FALSE, colors = brewer.pal(9, "BuPu")[4:9])
+wordcloud(results.corpus.title, random.order = FALSE, random.color = FALSE, colors = brewer.pal(9, "OrRd")[4:9])
+```
+
+```{r tdm, echo=FALSE}
+tdm.content <- TermDocumentMatrix(results.corpus.content)
+tdm.short <- TermDocumentMatrix(results.corpus.short)
+tdm.title <- TermDocumentMatrix(results.corpus.title)
+```
+
+```{r find most freq terms, echo=FALSE}
+for (i in list(tdm.content, tdm.short, tdm.title))
+  print(findFreqTerms(i, lowfreq = 15))
+```
+## example chunk
+```{r find sum and sort decreasing terms, echo=FALSE}
+tdm.content.sum <- as.matrix(tdm.content)
+tdm.content.sum <- rowSums(tdm.content.sum)
+tdm.content.sum <- sort(tdm.content.sum, decreasing = T)
+```
+
+
+```{r freq term barplot, echo=FALSE}
+## cex.names for size of labels, ylim for vertical axis(if the bar chart is vertical), width and space, density and angle takes vector/seq data for each bar, width for width of each bar, space for space inbetween bar, density for lines, angle for lines
+bar <- function(input){
+  input.sum <- sort(rowSums(as.matrix(input)), decreasing = T)
+  print(barplot(input.sum[1:10], col = brewer.pal(name = "Set3", n=10), horiz = F, main = "Most Frequent Terms", ylab = "# Repetition", xlab = rownames(input.sum), ylim = c(0,100), las = 2, cex.names = 0.8))
+  print(barplot(input.sum[1:10], col = brewer.pal(name = "Set3", n=10), horiz = T, main = "Most Frequent Terms", xlab = "# Repetition", ylab = rownames(input.sum), xlim = c(0,100), las = 1, cex.names = 0.7))
+  return(input.sum)
+  }
+  
+tdm.content.sum <- bar(tdm.content)
+tdm.short.sum <- bar(tdm.short)
+tdm.title.sum <- bar(tdm.title)
+```
+
+
+```{r assoc cors, echo=FALSE}
+for (i in list(tdm.content, tdm.short, tdm.title))
+  print(findAssocs(i, c("robinhood", "market", "trade"), corlimit = 0.3))
+```
+
+```{r bar plot for assoc, echo=FALSE}
+## takes tdm only
+assocbar <- function(input){
+  temp <- findAssocs(input, c("robinhood", "market", "trade"), corlimit = 0.3)
+  robin <- as.vector(temp[1])
+  mark <- as.vector(temp[2])
+  t <- as.vector(temp[3])
+  for (i in c(robin, mark, t))
+    print(barplot(i[1:10], col = brewer.pal(name = "Set3", n=10), horiz = T, main = "Most Associated Terms", xlab = "# Repetition", ylab = rownames(i[1:10]), xlim = c(0,1), las = 1, cex.names = 0.7))
+}
+
+assocbar(tdm.content)
+assocbar(tdm.short)
+assocbar(tdm.title)
+
+```
+
+## Sentiment Analysis
+```{r pos vs neg sentiment analysis, echo=FALSE}
+## title
+senti.title.syuzhet <- get_sentiment(results.df$title, method = 'syuzhet')
+senti.title.afinn <- get_sentiment(results.df$title, method = 'afinn')
+senti.title.bing <- get_sentiment(results.df$title, method = 'bing')
+senti.title.nrc <- get_sentiment(results.df$title, method = 'nrc')
+
+## content
+senti.content.syuzhet <- get_sentiment(results.df$content, method = 'syuzhet')
+senti.content.afinn <- get_sentiment(results.df$content, method = 'afinn')
+senti.content.bing <- get_sentiment(results.df$content, method = 'bing')
+senti.content.nrc <- get_sentiment(results.df$content, method = 'nrc')
+```
+
+```{r summary and boxplots etc, echo=FALSE}
+for (i in list(senti.title.syuzhet,senti.title.afinn, senti.title.bing, senti.title.nrc)){
+  print(summary(i))
+  boxplot(i, main = "Positive vs. Negative News Title")
+  hist(i, main = "Frequency of Positive and Negative", col = brewer.pal("BuPu", n=10), xlab = "Sentiment Pos. vs. Neg.")
+}
+for (i in list(senti.content.syuzhet,senti.content.afinn, senti.content.bing, senti.content.nrc)){
+  print(summary(i))
+  boxplot(i, main = "Positive vs. Negative News Content")
+  hist(i, main = "Frequency of Positive and Negative in Content", col = brewer.pal("Spectral", n=10), xlab = "Sentiment Pos. vs. Neg.")
+}
+```
+
+```{r nrc sentiment analysis, echo=FALSE}
+## title
+nrc.title <- get_nrc_sentiment(results.df$title)
+
+## content
+nrc.content <- get_nrc_sentiment(results.df$content)
+```
+
+```{r nrc barplot, echo=FALSE}
+for (i in list(nrc.title, nrc.content)){
+  barplot(as.matrix(i), main = "Emotions, inclusive of all datapoints", las = 2, cex.names = 0.9)
+  barplot(colSums(i), col = brewer.pal(name = "Set3", n=10), horiz = F, main = "All emotions captured", ylab = "Frequency", las = 2, cex.names = 0.9)
+}
+```
+
+```{r nrc barplot including mean, echo=FALSE}
+nrc.content.mean <- c(mean(nrc.content$anger), mean(nrc.content$anticipation), mean(nrc.content$disgust), mean(nrc.content$fear), mean(nrc.content$joy), mean(nrc.content$sadness), mean(nrc.content$surprise), mean(nrc.content$trust), mean(nrc.content$negative), mean(nrc.content$positive))
+
+nrc.title.mean <- c(mean(nrc.title$anger), mean(nrc.title$anticipation), mean(nrc.title$disgust), mean(nrc.title$fear), mean(nrc.title$joy), mean(nrc.title$sadness), mean(nrc.title$surprise), mean(nrc.title$trust), mean(nrc.title$negative), mean(nrc.title$positive))
+
+barplot(colSums(nrc.content), col = brewer.pal(name = "Set3", n=10), horiz = F, main = "All emotions captured in Content(width and stripes corrected for mean)", ylab = "Frequency", las = 2, cex.names = 0.9, angle = (nrc.content.mean/1.01)*90, width = 100 * nrc.content.mean, density = 45 * nrc.content.mean)
+
+barplot(colSums(nrc.title), col = brewer.pal(name = "Set3", n=10), horiz = F, main = "All emotions captured in Title(width and stripes corrected for mean)", ylab = "Frequency", las = 2, cex.names = 0.9, angle = (nrc.title.mean/0.4)*90, width = 100 * nrc.title.mean, density = 45 * nrc.title.mean)
+```
+
+
+
+
